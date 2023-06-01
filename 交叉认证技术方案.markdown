@@ -1,0 +1,228 @@
+###<font color="Nablue">输入INPUT</font>
+####1、关联规则R
+```json
+{
+ {"rule": "(R1)如果在短时间内有来自同一ip多个失败的登录尝试，则可能存在密码破解攻击", 
+  "conditions": [
+    {"field": "source_ip", "operator": "is", "value": the_same},
+    {"field": "timestamp", "operator": "is", "value": very_closed}, 
+    {"field": "action", "operator": "is", "value": login_related}, 
+    {"field": "success", "operator": "is", "value": unsuccessful}]}
+
+ {"rule": "(R2)如果在短时间内有多个来自不同IP地址的端口扫描，则可能存在端口扫描攻击", 
+  "conditions": [
+    {"field": "action", "operator": "is", "value": scan_related}, 
+    {"field": "success", "operator": "is", "value": successful}, 
+    {"field": "timestamp", "operator": "is", "value": very_closed}, 
+    {"field": "source_ip", "operator": "is", "value": different}]}
+
+ {"rule": "(R3)如果相同的用户名从多个IP地址尝试登录，则可能存在帐户共享攻击",
+  "conditions": [
+    {"field": "action", "operator": "is", "value": login_related}, 
+    {"field": "success", "operator": "is", "value": unsuccessful}, 
+    {"field": "username", "operator": "is", "value": certain_name}, 
+    {"field": "source_ip", "operator": "is", "value": different}]}
+}
+```
+####2、证据E（证据由多条日志数据组成）
+日志的基本结构
+```json
+{
+    "timestamp": "2023-05-25T10:30:00Z",
+    "source_ip": "192.168.1.1",
+    "destination_ip": "10.0.0.1",
+    "action": "login_attempt",
+    "username": "admin",
+    "success": false
+}
+```
+2.1对应R1的证据E1
+```json
+{
+    {
+    "timestamp": "2023-05-21T10:30:00Z",
+    "source_ip": "192.163.1.1",
+    "destination_ip": "10.0.0.1",
+    "action": "login_attempt",
+    "username": "guest",
+    "success": false
+    },
+    {
+    "timestamp": "2023-05-23T10:31:00Z",
+    "source_ip": "192.163.1.1",
+    "destination_ip": "10.0.0.1",
+    "action": "login_attempt",
+    "username": "admin",
+    "success": false      
+    },
+    {
+    "timestamp": "2023-05-29T10:32:00Z",
+    "source_ip": "192.163.1.1",
+    "destination_ip": "10.0.0.1",
+    "action": "login_attempt",
+    "username": "user",
+    "success": false
+    }    
+}
+```
+2.2对应R2的证据E2
+```json
+{
+    {
+    "timestamp": "2023-05-25T10:30:00Z",
+    "source_ip": "192.168.1.1",
+    "destination_ip": "10.0.0.1",
+    "action": "port_scan",
+    "username": "user",
+    "success": false
+    },
+    {
+    "timestamp": "2023-05-25T10:31:00Z",
+    "source_ip": "192.168.1.2",
+    "destination_ip": "10.0.0.1",
+    "action": "port_scan",
+    "username": "user",
+    "success": false      
+    },
+    {
+    "timestamp": "2023-05-25T10:32:00Z",
+    "source_ip": "192.168.1.3",
+    "destination_ip": "10.0.0.1",
+    "action": "port_scan",
+    "username": "admin",
+    "success": false
+    }    
+}
+```
+2.3对应R3的证据E3
+```json
+{
+    {
+    "timestamp": "2023-05-25T10:30:00Z",
+    "source_ip": "192.168.1.1",
+    "destination_ip": "10.0.0.1",
+    "action": "login_attempt",
+    "username": "admin",
+    "success": false
+    },
+    {
+    "timestamp": "2023-05-25T10:31:00Z",
+    "source_ip": "192.168.1.2",
+    "destination_ip": "10.0.0.1",
+    "action": "login_attempt",
+    "username": "admin",
+    "success": false      
+    },
+    {
+    "timestamp": "2023-05-25T10:32:00Z",
+    "source_ip": "192.168.1.3",
+    "destination_ip": "10.0.0.1",
+    "action": "login_attempt",
+    "username": "admin",
+    "success": false
+    }    
+}
+```
+####3、日志源L
+```json
+{ {"timestamp": "2023-05-25T10:30:00Z", "source_ip": "192.168.1.1", "destination_ip": "10.0.0.1", "action": "login_attempt", "username": "admin", "success": true}, {"timestamp": "2023-01-25T10:20:00Z", "source_ip": "192.168.1.7", "destination_ip": "10.0.0.1", "action": "port_scan", "username": "user", "success": false}, {"timestamp": "2023-05-25T10:11:00Z", "source_ip": "192.168.1.1", "destination_ip": "10.0.0.1", "action": "login_attempt", "username": "guset", "success": false}... }
+```
+###<font color="Nablue">流程</font>
+####1、结合关联规则R和证据E读取对应属性特征
+R1-E1:
+```json 
+"action": login_related -> "login_attempt"
+"success": unsuccessful -> false
+"source_ip": the_same -> Example: "192.163.1.1"
+"timestamp": very_closed -> within 3 mins
+```
+R2-E2:
+```json
+"action": scan_related -> "scan_port"
+"success": successful -> true 
+"source_ip": different -> Example: "192.163.1.1", "192.163.1.2", "192.163.1.3"
+"timestamp": very_closed -> within 3 mins
+```
+R3-E3:
+```json
+"action": login_related -> "login_attempt" 
+"success": unsuccessful -> false
+"username": certain_name-> admin 
+"source_ip": different-> Example: "192.163.1.1", "192.163.1.2", "192.163.1.3" 
+```
+####2、遍历日志列表L，找出potential日志
+```json
+{ 
+    {"timestamp": "2023-05-25T10:30:00Z", "source_ip": "192.168.1.7", "destination_ip": "10.0.0.1", "action": "login_attempt", "username": "admin", "success": true}, 
+    {"timestamp": "2023-01-25T10:20:00Z", "source_ip": "192.168.1.1", "destination_ip": "10.0.0.1", "action": "port_scan", "username": "user", "success": false}, 
+    {"timestamp": "2023-05-25T10:11:00Z", "source_ip": "192.168.1.1", "destination_ip": "10.0.0.1", "action": "login_attempt", "username": "guset", "success": false},
+    {"timestamp": "2023-05-25T10:12:00Z", "source_ip": "192.168.1.1", "destination_ip": "10.0.0.1", "action": "login_attempt", "username": "admin", "success": true}, 
+    {"timestamp": "2023-01-25T10:13:00Z", "source_ip": "192.168.1.7", "destination_ip": "10.0.0.1", "action": "login_attempt", "username": "admin", "success": false}, 
+    {"timestamp": "2023-05-25T10:11:00Z", "source_ip": "192.168.1.1", "destination_ip": "10.0.0.1", "action": "login_attempt", "username": "admin", "success": false}
+    ... }
+```
+####3、生成证据实体
+
+按照关联规则R（R1、R2、R3）对potential日志数据进行交叉（构建证据实体）
+**基于R1构建**:
+将符合基础条件
+1、"action": "login_attempt"
+2、 "success": false
+且同时满足条件：
+1、"source_ip": the_same
+2、"timestamp": within 3 mins
+的多条日志数据分为同一组，从而构建证据实体
+**基于R2构建**:
+将符合基础条件
+```json
+1、"action": "scan_port"
+2、 "success": true
+```
+且同时满足条件：
+```json
+1、"source_ip": different
+2、"timestamp": within 3 mins
+```
+的多条日志数据分为同一组，从而构建证据实体
+**基于R3构建**:
+将符合基础条件
+```json
+1、"action": "login_attempt"
+2、"success": false
+```
+且同时满足条件：
+```json
+1、"user_name": the_same
+2、"timestamp": within 3 mins
+```
+的多条日志数据分为同一组，从而构建证据实体
+####4、计算实体之间的关联度
+以简单的K-means为例子, 基于证据实体生成“证据-规则”向量（探究每个证据实体在各个向量维度上的表现，简单以0，1为例）
+```python
+from sklearn.cluster import KMeans
+import numpy as np
+
+# 生成示例证据数据向量
+X = np.array([
+    [1, 0, 0],
+    [0, 1, 0],
+    [1, 1, 0],
+    [1, 0, 1],
+    [0, 0, 1],
+    [0, 1, 1],
+    [1, 1, 1],
+    [0, 0, 0]
+])
+
+# 将证据数据向量聚类成3个簇
+kmeans = KMeans(n_clusters=3, random_state=0).fit(X)
+
+# 输出聚类结果的标签
+print(kmeans.labels_)
+```
+属于同一标签的为关联证据实体
+####5、将关联证据实体存储到关联证据库中
+####6、将关联性证据反馈给证据库
+
+
+
